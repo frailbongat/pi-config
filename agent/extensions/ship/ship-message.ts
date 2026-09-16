@@ -274,8 +274,8 @@ export function validateCommitMessage(raw: string): ValidationResult {
 }
 
 /**
- * Puts an issue reference on the subject line, buying the room it needs by
- * dropping words off the summary.
+ * Puts an issue reference on the subject line in `(Closes #42)` form, buying
+ * the room it needs by dropping words off the summary.
  *
  * The reference always rides the subject, because that is the line every log,
  * blame, and pull request title shows, and a footer hides it behind a body the
@@ -283,7 +283,8 @@ export function validateCommitMessage(raw: string): ValidationResult {
  */
 export function inlineReference(subject: string, reference: string): string {
   const [verb, number] = reference.split(" ");
-  const suffix = ` (${verb!.toLowerCase()} ${number})`;
+  const word = verb!.toLowerCase();
+  const suffix = ` (${word[0]!.toUpperCase()}${word.slice(1)} ${number})`;
   return `${shortenSubject(subject, SUBJECT_LIMIT - lineLength(suffix))}${suffix}`;
 }
 
