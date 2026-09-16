@@ -2,7 +2,6 @@
   "defaultProvider": "cliproxyapi",
   "defaultModel": "claude-opus-5",
   "defaultThinkingLevel": "high",
-  "transport": "sse",
   "packages": [
     {
       "source": "npm:@router-for-me/pi-cliproxyapi-provider",
@@ -10,8 +9,6 @@
         "!tps.ts"
       ]
     },
-    "npm:pi-mcp-adapter",
-    "npm:pi-web-access",
     "npm:pi-subagents"
   ],
   "lastChangelogVersion": "0.85.1",

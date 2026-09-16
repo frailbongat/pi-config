@@ -1,8 +1,0 @@
-{
-  "providers": {
-    "openai": {
-      "baseUrl": "http://localhost:8787/v1",
-      "models": [{ "id": "claude-opus-5" }]
-    }
-  }
-}
