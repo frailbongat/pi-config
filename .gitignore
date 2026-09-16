@@ -23,5 +23,10 @@ agent/cliproxyapi-models.json
 # --- Session transcripts (private, high churn) ---
 agent/sessions/
 
+# --- Subagent mission records (pi-subagents) ---
+# Durable delegation records; store project paths + recordPath in plaintext.
+# Auto-pruned via missions.retainTerminal (default 200).
+agent/missions/
+
 # --- Logs ---
 *.log
