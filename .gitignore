@@ -19,6 +19,22 @@ agent/bin/
 agent/tmp/
 agent/mcp-cache.json
 agent/cliproxyapi-models.json
+agent/web-search-cache/
+
+# --- Machine-local state & overrides ---
+# trust.json holds absolute paths for this machine only.
+agent/trust.json
+**/*.local.json
+
+# --- Skills ---
+# Most entries here are symlinks into ~/.agents/skills (a separate store).
+# Committing them would only produce dangling symlinks on any other machine.
+# Only locally-owned skill directories are tracked.
+agent/skills/*
+!agent/skills/impeccable/
+# ...minus impeccable's vendored binary + generated font index.
+agent/skills/impeccable/scripts/bin/
+agent/skills/impeccable/scripts/data/font-index*.json
 
 # --- Session transcripts (private, high churn) ---
 agent/sessions/
