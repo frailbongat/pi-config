@@ -1,0 +1,27 @@
+# --- OS cruft ---
+.DS_Store
+**/.DS_Store
+
+# --- Secrets / credentials (never commit) ---
+agent/auth.json
+agent/cliproxyapi.json
+agent/models-store.json
+**/*.key
+**/*.pem
+.env
+.env.*
+
+# --- Installed dependencies & vendored binaries ---
+agent/npm/node_modules/
+agent/bin/
+
+# --- Caches & generated state ---
+agent/tmp/
+agent/mcp-cache.json
+agent/cliproxyapi-models.json
+
+# --- Session transcripts (private, high churn) ---
+agent/sessions/
+
+# --- Logs ---
+*.log
