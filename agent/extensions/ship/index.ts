@@ -213,8 +213,8 @@ Body:
 
 Footers:
 - Never invent issue references. If the request says the caller appends one, omit it.
-- Otherwise an explicitly requested reference ends the subject, as (Closes #42)
-  or (Refs #17). Never write it as a footer under the body.
+- Otherwise an explicitly requested reference ends the subject, as (closes #42)
+  or (refs #17). Never write it as a footer under the body.
 - Breaking changes must include a BREAKING CHANGE: footer.
 
 Never include fluff, first-person narration, emoji, Co-authored-by, or AI attribution.`;
@@ -389,8 +389,7 @@ function buildGenerationPrompt(
   issueNumber?: string,
   issueVerb: IssueVerb = "closes",
 ): string {
-  const word = issueVerb === "closes" ? "Closes" : "Refs";
-  const referenceSuffix = issueNumber ? ` (${word} #${issueNumber})` : "";
+  const referenceSuffix = issueNumber ? ` (${issueVerb} #${issueNumber})` : "";
   const issueInstruction = issueNumber
     ? `\nReturn exactly one subject line with no body, footer, or issue reference.\nThe caller will append ${referenceSuffix}. Keep your subject at or below ${72 - lineLength(referenceSuffix)} characters before that suffix.\n`
     : "";

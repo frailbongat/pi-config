@@ -764,7 +764,7 @@ describe("commit message shape", () => {
 
     expect(stripUnneededBody(message)).toBe(
       [
-        "feat(api)!: rename /v1/orders to /v1/checkout (Closes #42)",
+        "feat(api)!: rename /v1/orders to /v1/checkout (closes #42)",
         "",
         "BREAKING CHANGE: clients must migrate before 2026-06-01.",
       ].join("\n"),
@@ -781,7 +781,7 @@ describe("commit message shape", () => {
     ].join("\n");
 
     expect(stripUnneededBody(message)).toBe(
-      "fix(auth): stop refreshing an expired session (Closes #42)",
+      "fix(auth): stop refreshing an expired session (closes #42)",
     );
   });
 
@@ -789,7 +789,7 @@ describe("commit message shape", () => {
     const added = addClosingIssue("fix(auth): expire idle sessions", "42");
     expect(added).toEqual({
       ok: true,
-      message: "fix(auth): expire idle sessions (Closes #42)",
+      message: "fix(auth): expire idle sessions (closes #42)",
     });
     expect(validateCommitMessage(added.ok ? added.message : "").ok).toBe(true);
   });
@@ -802,7 +802,7 @@ describe("commit message shape", () => {
     expect(added).toEqual({
       ok: true,
       message: [
-        "feat(api)!: drop /v1/orders (Closes #42)",
+        "feat(api)!: drop /v1/orders (closes #42)",
         "",
         "BREAKING CHANGE: migrate to /v1/checkout.",
       ].join("\n"),
@@ -810,7 +810,7 @@ describe("commit message shape", () => {
   });
 
   it("drops words rather than push the reference into a footer", () => {
-    // 65 characters, legal on its own; ` (Closes #51)` would make it 78.
+    // 65 characters, legal on its own; ` (closes #51)` would make it 78.
     const subject =
       "refactor(experience): reach the calendar without a pointer at all";
     expect(validateCommitMessage(subject).ok).toBe(true);
@@ -819,12 +819,12 @@ describe("commit message shape", () => {
     expect(added).toEqual({
       ok: true,
       message:
-        "refactor(experience): reach the calendar without a pointer (Closes #51)",
+        "refactor(experience): reach the calendar without a pointer (closes #51)",
     });
     expect(validateCommitMessage(added.ok ? added.message : "").ok).toBe(true);
   });
 
-  it("writes Refs instead of Closes when the issue stays open", () => {
+  it("writes refs instead of closes when the issue stays open", () => {
     const added = addIssueReference(
       "fix(auth): expire idle sessions",
       "42",
@@ -832,12 +832,12 @@ describe("commit message shape", () => {
     );
     expect(added).toEqual({
       ok: true,
-      message: "fix(auth): expire idle sessions (Refs #42)",
+      message: "fix(auth): expire idle sessions (refs #42)",
     });
     expect(validateCommitMessage(added.ok ? added.message : "").ok).toBe(true);
   });
 
-  it("keeps a Refs reference on the subject of a message with a body", () => {
+  it("keeps a refs reference on the subject of a message with a body", () => {
     const added = addIssueReference(
       "feat(api)!: drop /v1/orders\n\nBREAKING CHANGE: migrate to /v1/checkout.",
       "42",
@@ -846,7 +846,7 @@ describe("commit message shape", () => {
     expect(added).toEqual({
       ok: true,
       message: [
-        "feat(api)!: drop /v1/orders (Refs #42)",
+        "feat(api)!: drop /v1/orders (refs #42)",
         "",
         "BREAKING CHANGE: migrate to /v1/checkout.",
       ].join("\n"),

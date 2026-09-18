@@ -12,8 +12,8 @@ export interface ShipArguments {
   /** Print the step-by-step progress notices instead of just the commit. */
   readonly verbose?: boolean;
   /**
-   * Reference the issue without closing it, as `(Refs #42)` rather than
-   * `(Closes #42)`. For the change that moves a ticket forward but does not
+   * Reference the issue without closing it, as `(refs #42)` rather than
+   * `(closes #42)`. For the change that moves a ticket forward but does not
    * finish it.
    */
   readonly keepOpen?: boolean;
@@ -45,7 +45,7 @@ const KEEP_OPEN_WORDS = new Set([
  *
  * `refs` is the same kind of keyword for the issue: it keeps the reference and
  * drops the closing verb, so `/ship refs` on a session that mentions an issue
- * writes `(Refs #42)` and leaves the ticket open.
+ * writes `(refs #42)` and leaves the ticket open.
  */
 export function parseShipArguments(
   raw: string,

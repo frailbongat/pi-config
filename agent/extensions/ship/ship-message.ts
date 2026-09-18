@@ -274,7 +274,7 @@ export function validateCommitMessage(raw: string): ValidationResult {
 }
 
 /**
- * Puts an issue reference on the subject line in `(Closes #42)` form, buying
+ * Puts an issue reference on the subject line in `(closes #42)` form, buying
  * the room it needs by dropping words off the summary.
  *
  * The reference always rides the subject, because that is the line every log,
@@ -283,8 +283,7 @@ export function validateCommitMessage(raw: string): ValidationResult {
  */
 export function inlineReference(subject: string, reference: string): string {
   const [verb, number] = reference.split(" ");
-  const word = verb!.toLowerCase();
-  const suffix = ` (${word[0]!.toUpperCase()}${word.slice(1)} ${number})`;
+  const suffix = ` (${verb!.toLowerCase()} ${number})`;
   return `${shortenSubject(subject, SUBJECT_LIMIT - lineLength(suffix))}${suffix}`;
 }
 
@@ -306,7 +305,7 @@ export function stripUnneededBody(message: string): string {
 
   const reference = message
     .slice(subject.length)
-    .match(/^(?:Closes|Fixes|Refs) #\d+$/im)?.[0];
+    .match(/^(?:closes|fixes|refs) #\d+$/im)?.[0];
 
   const breaking = /!:/.test(subject) || /^BREAKING CHANGE: /m.test(message);
   if (breaking || /^revert\b/i.test(subject)) {
@@ -357,13 +356,12 @@ export function addIssueReference(
   const lines = validation.message.split("\n");
   const subject = inlineReference(lines[0] ?? "", `${verb} #${issueNumber}`);
   const rest = lines.slice(1).join("\n");
-  const footer = verb === "closes" ? "Closes" : "Refs";
 
   const inlined = validateCommitMessage(rest ? `${subject}\n${rest}` : subject);
   return inlined.ok
     ? inlined
     : validateCommitMessage(
-        `${validation.message}\n\n${footer} #${issueNumber}`,
+        `${validation.message}\n\n${verb} #${issueNumber}`,
       );
 }
 
