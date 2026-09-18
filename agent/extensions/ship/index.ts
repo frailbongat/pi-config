@@ -10,13 +10,14 @@ import type {
 } from "@earendil-works/pi-coding-agent";
 import {
   COMMIT_TYPES,
-  addClosingIssue,
+  addIssueReference,
   forceValidCommitMessage,
   lineLength,
   pickFastModel,
   repairCommitMessage,
   stripUnneededBody,
   validateCommitMessage,
+  type IssueVerb,
 } from "./ship-message";
 import {
   createCheckLedger,
@@ -69,11 +70,13 @@ export {
 export { expandScripts, repoWideLabels } from "./ship-quality";
 export {
   addClosingIssue,
+  addIssueReference,
   forceValidCommitMessage,
   repairCommitMessage,
   shortenSubject,
   stripUnneededBody,
   validateCommitMessage,
+  type IssueVerb,
 } from "./ship-message";
 
 const GIT_TIMEOUT_MS = 30_000;
@@ -384,10 +387,12 @@ function buildGenerationPrompt(
   recentSubjects: string,
   previousError?: string,
   issueNumber?: string,
+  issueVerb: IssueVerb = "closes",
 ): string {
-  const closingSuffix = issueNumber ? ` (Closes #${issueNumber})` : "";
+  const word = issueVerb === "closes" ? "Closes" : "Refs";
+  const referenceSuffix = issueNumber ? ` (${word} #${issueNumber})` : "";
   const issueInstruction = issueNumber
-    ? `\nReturn exactly one subject line with no body, footer, or issue reference.\nThe caller will append ${closingSuffix}. Keep your subject at or below ${72 - lineLength(closingSuffix)} characters before that suffix.\n`
+    ? `\nReturn exactly one subject line with no body, footer, or issue reference.\nThe caller will append ${referenceSuffix}. Keep your subject at or below ${72 - lineLength(referenceSuffix)} characters before that suffix.\n`
     : "";
 
   return `Write the commit message for the staged change below.
@@ -473,6 +478,7 @@ async function generateWithModel(
   diffTruncated: boolean,
   recentSubjects: string,
   issueNumber?: string,
+  issueVerb: IssueVerb = "closes",
   salvage = true,
 ): Promise<string> {
   const auth = await ctx.modelRegistry.getApiKeyAndHeaders(model);
@@ -506,6 +512,7 @@ async function generateWithModel(
                     recentSubjects,
                     previousError,
                     issueNumber,
+                    issueVerb,
                   ),
                 },
               ],
@@ -550,7 +557,7 @@ async function generateWithModel(
         .join("\n");
       const finish = (candidate: string) =>
         issueNumber
-          ? addClosingIssue(candidate, issueNumber)
+          ? addIssueReference(candidate, issueNumber, issueVerb)
           : validateCommitMessage(candidate);
 
       const terse = stripUnneededBody(repairCommitMessage(raw));
@@ -598,6 +605,7 @@ async function generateCommitMessage(
   diffTruncated: boolean,
   recentSubjects: string,
   issueNumber?: string,
+  issueVerb: IssueVerb = "closes",
 ): Promise<string> {
   const model = resolveMessageModel(ctx);
   if (!model)
@@ -616,6 +624,7 @@ async function generateCommitMessage(
       diffTruncated,
       recentSubjects,
       issueNumber,
+      issueVerb,
       salvage,
     );
 
@@ -971,7 +980,7 @@ async function assertBranchPushable(git: Git): Promise<void> {
 export async function runShip(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
-  { issueNumber, override, recheck, verbose }: ShipArguments = {},
+  { issueNumber, override, recheck, verbose, keepOpen }: ShipArguments = {},
   ledger: CheckLedger = createCheckLedger(),
 ): Promise<void> {
   // Every step announcing itself buries the one line that matters, the commit
@@ -1063,15 +1072,23 @@ export async function runShip(
   const stagedTree = (
     await requireSuccess(git, ["write-tree"], "Snapshotting staged changes")
   ).stdout.trim();
-  let closingIssueNumber = issueNumber;
+  // A ship that only moves a ticket forward still wants the link, so the
+  // reference is written either way and only the verb changes. `refs` never
+  // triggers GitHub's close-on-merge.
+  const issueVerb: IssueVerb = keepOpen ? "refs" : "closes";
+  let referencedIssueNumber = issueNumber;
   // `gh repo view` is a network round trip, so it is only worth paying for when
   // the session actually mentions an issue for it to disambiguate.
-  if (!closingIssueNumber && findIssueReferenceInSession(ctx)) {
+  if (!referencedIssueNumber && findIssueReferenceInSession(ctx)) {
     const repository = await resolveGitHubRepository(git, github);
     const reference = findIssueReferenceInSession(ctx, repository);
-    closingIssueNumber = reference?.issueNumber;
-    if (closingIssueNumber) {
-      progress(`Using issue #${closingIssueNumber} from the current session.`);
+    referencedIssueNumber = reference?.issueNumber;
+    if (referencedIssueNumber) {
+      progress(
+        issueVerb === "closes"
+          ? `Closing issue #${referencedIssueNumber} from the current session; use /ship refs to only reference it.`
+          : `Referencing issue #${referencedIssueNumber} from the current session without closing it.`,
+      );
     }
   }
 
@@ -1105,7 +1122,8 @@ export async function runShip(
     boundedDiff.text,
     boundedDiff.truncated,
     recentResult.code === 0 ? recentResult.stdout.trim() : "",
-    closingIssueNumber,
+    referencedIssueNumber,
+    issueVerb,
   );
 
   const currentTree = (
@@ -1279,6 +1297,8 @@ export async function shipCommand(
         issueNumber: parsed.issueNumber,
         override: forced ?? parsed.override,
         recheck: parsed.recheck,
+        verbose: parsed.verbose,
+        keepOpen: parsed.keepOpen,
       },
       ledger,
     );
@@ -1387,7 +1407,7 @@ export default function shipExtension(pi: ExtensionAPI) {
 
   pi.registerCommand("ship", {
     description:
-      "Commit and push, picking the destination itself; force it with /ship main or /ship branch, show every step with /ship verbose",
+      "Commit and push, picking the destination itself; force it with /ship main or /ship branch, keep the issue open with /ship refs, show every step with /ship verbose",
     handler: (args, ctx) => shipCommand(pi, args, ctx, "/ship", undefined, ledger),
   });
 }

@@ -325,6 +325,13 @@ export function stripUnneededBody(message: string): string {
 }
 
 /**
+ * What the commit does to the issue it names. `closes` lets GitHub close the
+ * ticket on merge; `refs` links the work and leaves it open, for the change
+ * that moves a ticket forward without finishing it.
+ */
+export type IssueVerb = "closes" | "refs";
+
+/**
  * The reference goes in the subject, always, because the subject is the whole
  * message in the ordinary case and a footer would hide the ticket behind a body
  * that says nothing. A subject the suffix would push past 72 loses words to
@@ -333,9 +340,10 @@ export function stripUnneededBody(message: string): string {
  * left only for the subject no shortening can save, where a valid message beats
  * a ship that refuses to happen.
  */
-export function addClosingIssue(
+export function addIssueReference(
   raw: string,
   issueNumber: string,
+  verb: IssueVerb = "closes",
 ): ValidationResult {
   const validation = validateCommitMessage(raw);
   if (!validation.ok) return validation;
@@ -347,13 +355,22 @@ export function addClosingIssue(
   }
 
   const lines = validation.message.split("\n");
-  const subject = inlineReference(lines[0] ?? "", `closes #${issueNumber}`);
+  const subject = inlineReference(lines[0] ?? "", `${verb} #${issueNumber}`);
   const rest = lines.slice(1).join("\n");
+  const footer = verb === "closes" ? "Closes" : "Refs";
 
   const inlined = validateCommitMessage(rest ? `${subject}\n${rest}` : subject);
   return inlined.ok
     ? inlined
     : validateCommitMessage(
-        `${validation.message}\n\nCloses #${issueNumber}`,
+        `${validation.message}\n\n${footer} #${issueNumber}`,
       );
+}
+
+/** Kept for callers that only ever closed. */
+export function addClosingIssue(
+  raw: string,
+  issueNumber: string,
+): ValidationResult {
+  return addIssueReference(raw, issueNumber, "closes");
 }

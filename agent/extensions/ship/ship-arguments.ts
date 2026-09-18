@@ -11,12 +11,29 @@ export interface ShipArguments {
   readonly recheck?: boolean;
   /** Print the step-by-step progress notices instead of just the commit. */
   readonly verbose?: boolean;
+  /**
+   * Reference the issue without closing it, as `(Refs #42)` rather than
+   * `(Closes #42)`. For the change that moves a ticket forward but does not
+   * finish it.
+   */
+  readonly keepOpen?: boolean;
 }
 
 const TRUNK_WORDS = new Set(["main", "trunk", "master"]);
 const BRANCH_WORDS = new Set(["branch", "here"]);
 const RECHECK_WORDS = new Set(["recheck", "check", "checks"]);
 const VERBOSE_WORDS = new Set(["verbose", "-v", "--verbose", "loud"]);
+const KEEP_OPEN_WORDS = new Set([
+  "refs",
+  "ref",
+  "--refs",
+  "open",
+  "keep-open",
+  "keepopen",
+  "no-close",
+  "noclose",
+  "wip",
+]);
 
 /**
  * Tokens in any order, because there is no reason to remember an order for two
@@ -25,16 +42,21 @@ const VERBOSE_WORDS = new Set(["verbose", "-v", "--verbose", "loud"]);
  * `main` is a keyword meaning "the trunk", not a branch name. On a repository
  * whose trunk is `master`, `/ship main` still lands on `master`, because the
  * destination is resolved from `origin/HEAD` either way.
+ *
+ * `refs` is the same kind of keyword for the issue: it keeps the reference and
+ * drops the closing verb, so `/ship refs` on a session that mentions an issue
+ * writes `(Refs #42)` and leaves the ticket open.
  */
 export function parseShipArguments(
   raw: string,
   command = "/ship",
 ): ShipArguments {
-  const usage = `Usage: ${command} [main|branch] [recheck] [verbose] [issue-number] (example: ${command} main 174)`;
+  const usage = `Usage: ${command} [main|branch] [recheck] [verbose] [refs] [issue-number] (example: ${command} main refs 174)`;
   let issueNumber: string | undefined;
   let override: ShipOverride | undefined;
   let recheck = false;
   let verbose = false;
+  let keepOpen = false;
 
   for (const token of raw.trim().split(/\s+/).filter(Boolean)) {
     const word = token.toLowerCase();
@@ -58,6 +80,11 @@ export function parseShipArguments(
       continue;
     }
 
+    if (KEEP_OPEN_WORDS.has(word)) {
+      keepOpen = true;
+      continue;
+    }
+
     const parsed = TRUNK_WORDS.has(word)
       ? "trunk"
       : BRANCH_WORDS.has(word)
@@ -70,7 +97,7 @@ export function parseShipArguments(
     override = parsed;
   }
 
-  return { issueNumber, override, recheck, verbose };
+  return { issueNumber, override, recheck, verbose, keepOpen };
 }
 
 /** Kept for callers that only ever passed an issue number. */

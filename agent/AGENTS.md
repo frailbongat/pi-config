@@ -58,12 +58,12 @@ Only say close when the ticket is genuinely ready to close. All of this has to b
 - You verified it in this session. Tests pass, the command ran, the behavior changed.
 - Nothing is left but my review and the commit.
 
-If any of that fails, do not say close. Name what is still open in the same sentence instead:
+If any of that fails, do not say close. Say `/ship refs`, which references the issue without closing it, and name what is still open in the same sentence:
 
 ```
 ### Next
 
-Ship this, but #42 stays open until the retry path has a test.
+/ship refs, #42 stays open until the retry path has a test.
 ```
 
 When I only scoped part of the ticket, say so and name the rest:
@@ -71,7 +71,7 @@ When I only scoped part of the ticket, say so and name the rest:
 ```
 ### Next
 
-Ship this, then #42 still wants the rate-limit headers and the 429 retry.
+/ship refs, then #42 still wants the rate-limit headers and the 429 retry.
 ```
 
 Drop the Next block only when it would be empty, and say so in one word rather than padding it.

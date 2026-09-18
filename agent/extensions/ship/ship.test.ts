@@ -19,6 +19,7 @@ import { alert, DEFAULT_ALERT } from "./ship-alert";
 import { resolveGitHubRepository } from "./ship-repository";
 import {
   addClosingIssue,
+  addIssueReference,
   forceValidCommitMessage,
   pickFastModel,
   repairCommitMessage,
@@ -322,6 +323,7 @@ describe("ship arguments", () => {
       override: undefined,
       recheck: false,
       verbose: false,
+      keepOpen: false,
     });
   });
 
@@ -331,12 +333,14 @@ describe("ship arguments", () => {
       override: "trunk",
       recheck: false,
       verbose: false,
+      keepOpen: false,
     });
     expect(parseShipArguments("174 branch")).toEqual({
       issueNumber: "174",
       override: "branch",
       recheck: false,
       verbose: false,
+      keepOpen: false,
     });
   });
 
@@ -346,6 +350,7 @@ describe("ship arguments", () => {
       override: "trunk",
       recheck: true,
       verbose: false,
+      keepOpen: false,
     });
   });
 
@@ -355,8 +360,22 @@ describe("ship arguments", () => {
       override: undefined,
       recheck: false,
       verbose: true,
+      keepOpen: false,
     });
     expect(parseShipArguments("main -v").verbose).toBe(true);
+  });
+
+  it("takes refs as a request to reference the issue without closing it", () => {
+    expect(parseShipArguments("refs 174")).toEqual({
+      issueNumber: "174",
+      override: undefined,
+      recheck: false,
+      verbose: false,
+      keepOpen: true,
+    });
+    for (const word of ["ref", "--refs", "open", "keep-open", "no-close", "wip"]) {
+      expect(parseShipArguments(`main ${word}`).keepOpen).toBe(true);
+    }
   });
 
   it("rejects arguments it cannot explain", () => {
@@ -803,6 +822,35 @@ describe("commit message shape", () => {
         "refactor(experience): reach the calendar without a pointer (Closes #51)",
     });
     expect(validateCommitMessage(added.ok ? added.message : "").ok).toBe(true);
+  });
+
+  it("writes Refs instead of Closes when the issue stays open", () => {
+    const added = addIssueReference(
+      "fix(auth): expire idle sessions",
+      "42",
+      "refs",
+    );
+    expect(added).toEqual({
+      ok: true,
+      message: "fix(auth): expire idle sessions (Refs #42)",
+    });
+    expect(validateCommitMessage(added.ok ? added.message : "").ok).toBe(true);
+  });
+
+  it("keeps a Refs reference on the subject of a message with a body", () => {
+    const added = addIssueReference(
+      "feat(api)!: drop /v1/orders\n\nBREAKING CHANGE: migrate to /v1/checkout.",
+      "42",
+      "refs",
+    );
+    expect(added).toEqual({
+      ok: true,
+      message: [
+        "feat(api)!: drop /v1/orders (Refs #42)",
+        "",
+        "BREAKING CHANGE: migrate to /v1/checkout.",
+      ].join("\n"),
+    });
   });
 });
 
