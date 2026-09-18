@@ -44,5 +44,10 @@ agent/sessions/
 # Auto-pruned via missions.retainTerminal (default 200).
 agent/missions/
 
+# --- Teaching workspaces ---
+# Personal learning material, not pi configuration.
+# Delete this line if you want the lessons tracked in the config repo.
+learning/
+
 # --- Logs ---
 *.log
