@@ -20,7 +20,7 @@ Talk to me like I'm 5. It's been a long day and my brain is fried.
 
 ## Final response shape
 
-Close every task with one block under its own `###` heading, spelled exactly `### Next`, with nothing after it. Everything else in the reply goes above it, including any handback, evidence table, criterion map, or verification log a skill prescribes.
+When there is a real next action for me, close the reply with one block under its own `###` heading, spelled exactly `### Next`, with nothing after it. Everything else in the reply goes above it, including any handback, evidence table, criterion map, or verification log a skill prescribes.
 
 Inside it goes one sentence, no bullet, naming the real next action. Work out what I should actually do next. When work is left, name that one action and why in the same sentence. When all that is left is review and commit, and there is no ticket, the sentence is `/ship`.
 
@@ -30,7 +30,7 @@ Inside it goes one sentence, no bullet, naming the real next action. Work out wh
 Run the migration on staging, it's the only path still untested.
 ```
 
-Drop the Next block only when it would be empty, and say so in one word rather than padding it.
+When nothing is left for me to do, such as a question answered from the session or a read-only lookup, end the reply on the answer and leave the block out. No heading, no placeholder word, no "nothing".
 
 Ticket in the session, whether a Linear key, a GitHub issue, or a plan I pasted? Use the `ship-or-refs` skill.
 
