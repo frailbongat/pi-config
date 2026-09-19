@@ -32,11 +32,11 @@ Run the migration on staging, it's the only path still untested.
 
 Drop the Next block only when it would be empty, and say so in one word rather than padding it.
 
-Ticket in the session, whether a Linear key, a GitHub issue, or a plan I pasted? Read `/Users/frailbongat/.pi/agent/reference/next-block-tickets.md` for finding the id, close versus `/ship refs`, and partial scope.
+Ticket in the session, whether a Linear key, a GitHub issue, or a plan I pasted? Use the `ship-or-refs` skill.
 
 ## Delegation
 
-Delegate to Paseo subagents by default. Before starting a task yourself, ask which profile fits, and launch it if one does. Read `/Users/frailbongat/.pi/agent/reference/delegation.md` for the profile routing, parallel runs, and how to brief an agent.
+Delegate to Paseo subagents by default. Before starting a task yourself, ask which profile fits, and launch it if one does. Use the `paseo-delegation` skill.
 
 Do the work yourself only when delegating costs more than it saves: a one-line edit, a single file read, a question you can answer from this session, or work that needs this session's live state.
 
