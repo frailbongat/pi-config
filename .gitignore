@@ -27,9 +27,11 @@ agent/trust.json
 **/*.local.json
 
 # --- Skills ---
-# Most entries here are symlinks into ~/.agents/skills (a separate store).
-# Committing them would only produce dangling symlinks on any other machine.
-# Only locally-owned skill directories are tracked.
+# Most entries here are symlinks. Vendor skills point into ~/.agents/skills,
+# and my own three (unslop, paseo-delegation, ship-or-refs) point into
+# ~/skills, the frailbongat/skills repo. Run ~/skills/install.sh to recreate
+# them. Committing them would only produce dangling symlinks on any other
+# machine, so only locally-owned skill directories are tracked.
 agent/skills/*
 !agent/skills/impeccable/
 # ...minus impeccable's vendored binary + generated font index.
