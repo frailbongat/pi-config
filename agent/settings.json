@@ -1,6 +1,6 @@
 {
   "defaultProvider": "cliproxyapi",
-  "defaultModel": "claude-opus-5",
+  "defaultModel": "claude-fable-5-1",
   "defaultThinkingLevel": "high",
   "packages": [
     {
