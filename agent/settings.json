@@ -12,7 +12,6 @@
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     "npm:pi-lens",
-    "npm:@juicesharp/rpiv-todo",
     "git:github.com/DietrichGebert/ponytail"
   ],
   "lastChangelogVersion": "0.85.1",
