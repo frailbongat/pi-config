@@ -11,8 +11,7 @@
     },
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
-    "npm:pi-lens",
-    "git:github.com/DietrichGebert/ponytail"
+    "npm:pi-lens"
   ],
   "lastChangelogVersion": "0.85.1",
   "theme": "dark"
