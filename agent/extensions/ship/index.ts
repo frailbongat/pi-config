@@ -37,6 +37,7 @@ import {
   ensureFastForward,
   listUnmergedPaths,
   pushWithRetry,
+  remoteRefExists,
   syncLocalTrunk,
   RebaseConflictError,
   type Git,
@@ -734,6 +735,10 @@ function hasPreCommitHook(repoRoot: string, gitDir?: string): boolean {
  * Returns a human-readable summary of what ran, or throws when a check fails.
  * On failure the staged tree is deliberately left intact so the user can fix
  * and rerun without restaging.
+ *
+ * `committed` is the commits-only ship: the files come from history instead of
+ * the index, and none of them may be rewritten, because a formatter's edits
+ * would land in the working tree rather than in the commits being pushed.
  */
 async function runStagedChecks(
   pi: ExtensionAPI,
@@ -743,6 +748,7 @@ async function runStagedChecks(
   ledger: CheckLedger,
   recheck: boolean,
   progress: (text: string) => void,
+  committed?: readonly string[],
 ): Promise<string> {
   const gitDirResult = await git(["rev-parse", "--absolute-git-dir"]);
   const gitDir =
@@ -751,13 +757,20 @@ async function runStagedChecks(
     return "skipped (pre-commit hook runs them at commit time)";
   }
 
-  const files = await listCheckFiles(git);
+  const files = committed ? [...committed] : await listCheckFiles(git);
   if (files.length === 0) return "skipped (no added or modified files)";
   if (files.length > MAX_CHECK_FILES) {
     return `skipped (${files.length} files exceeds the ${MAX_CHECK_FILES}-file limit)`;
   }
 
-  const heldBack = await listPartiallyStaged(git);
+  // What a failure leaves behind, which is the one thing the two runs do not
+  // share: an index full of reviewed work, or a history that never left disk.
+  const intact = committed ? "nothing was pushed" : "changes remain staged";
+  // Why a formatter was not allowed to fix this itself, and what to do instead.
+  const heldBackAdvice = committed
+    ? "These files are already committed, so ship will not rewrite them. Format them, commit the result, and run /ship again."
+    : "These files have unstaged edits, so ship will not rewrite them. Format them yourself, or stage the rest of the file.";
+  const heldBack = committed ? new Set(files) : await listPartiallyStaged(git);
   const ran: string[] = [];
   for (const spec of CHECK_SPECS) {
     const scoped = filesForSpec(files, spec);
@@ -796,7 +809,7 @@ async function runStagedChecks(
       // A non-zero exit here is a parse error or a crash, not a style diff.
       if (written.code !== 0) {
         throw new Error(
-          formatNotice(`${spec.label} failed; changes remain staged`, {
+          formatNotice(`${spec.label} failed; ${intact}`, {
             output: displayOutput(written),
           }),
         );
@@ -825,11 +838,9 @@ async function runStagedChecks(
         : result.code !== 0;
       if (failed) {
         throw new Error(
-          formatNotice(`${spec.label} failed; changes remain staged`, {
+          formatNotice(`${spec.label} failed; ${intact}`, {
             output: displayOutput(result),
-            footer: spec.writeArgs
-              ? "These files have unstaged edits, so ship will not rewrite them. Format them yourself, or stage the rest of the file."
-              : undefined,
+            footer: spec.writeArgs ? heldBackAdvice : undefined,
           }),
         );
       }
@@ -845,12 +856,12 @@ async function runStagedChecks(
   return ran.length > 0 ? ran.join(", ") : "skipped (no matching tool installed)";
 }
 
-function refuseSensitivePaths(paths: string[]): void {
+function refuseSensitivePaths(paths: string[], verb = "commit"): void {
   const sensitive = paths.filter(isSensitivePath);
   if (sensitive.length === 0) return;
   throw new Error(
     formatNotice(
-      `Refusing to commit sensitive path${sensitive.length === 1 ? "" : "s"}`,
+      `Refusing to ${verb} sensitive path${sensitive.length === 1 ? "" : "s"}`,
       { items: sensitive },
     ),
   );
@@ -916,6 +927,7 @@ async function assertLandable(
   git: Git,
   ctx: ExtensionCommandContext,
   landOn: string,
+  ridersArePayload: boolean,
 ): Promise<void> {
   await assertBranchPushable(git);
   await ensureFastForward(git, landOn, (message) =>
@@ -927,6 +939,11 @@ async function assertLandable(
   const ahead = await git(["log", "--oneline", `origin/${landOn}..HEAD`]);
   const riders = ahead.stdout.trim();
   if (!riders) return;
+
+  // With nothing in the working tree these commits are not riders at all: they
+  // are the thing that was asked for, and confirming them would be asking the
+  // command whether it meant itself.
+  if (ridersArePayload) return;
 
   const count = riders.split("\n").length;
   const question = `Also land ${count} existing commit${count === 1 ? "" : "s"} on ${landOn}?`;
@@ -976,6 +993,276 @@ async function assertBranchPushable(git: Git): Promise<void> {
   }
 }
 
+/** Where the push lands, in the words the report and the errors both use. */
+function destinationTarget(destination: Destination): string {
+  return destination.kind === "trunk"
+    ? `origin/${destination.ref}`
+    : destination.branch;
+}
+
+interface UnpushedWork {
+  /** `9fed34a Subject`, newest first, for the report and the confirmation. */
+  readonly lines: string[];
+  /** The `git log` range those lines came from, reused to list their files. */
+  readonly range: string[];
+}
+
+/**
+ * The commits on HEAD that the destination has not got.
+ *
+ * Two runs read this and mean opposite things by it. A ship that is about to
+ * write a commit calls them riders, work that lands alongside its own, which is
+ * why it asks first. A ship that finds a clean working tree calls them the
+ * payload: an agent that commits as it goes leaves the whole ship in history
+ * and nothing at all in the index.
+ */
+export async function listUnpushedCommits(
+  git: Git,
+  destination: Destination,
+): Promise<UnpushedWork> {
+  const ref =
+    destination.kind === "trunk" ? destination.ref : destination.branch;
+  // A branch that was never pushed has no counterpart to subtract, so the
+  // question becomes which commits no origin ref holds at all.
+  const range = (await remoteRefExists(git, ref))
+    ? [`origin/${ref}..HEAD`]
+    : ["HEAD", "--not", "--remotes=origin"];
+
+  const result = await git(["log", "--oneline", ...range]);
+  const text = result.code === 0 ? result.stdout.trim() : "";
+  return { lines: text ? text.split("\n") : [], range };
+}
+
+/**
+ * Every path the unpushed commits added or modified, deduplicated.
+ *
+ * Read per commit rather than as one endpoint diff, because a secret added in
+ * the first commit and deleted in the last is invisible to the endpoints and is
+ * still on its way to the remote.
+ */
+export async function listCommittedPaths(
+  git: Git,
+  range: readonly string[],
+): Promise<string[]> {
+  const result = await git([
+    "log",
+    "--format=",
+    "--name-only",
+    "-z",
+    "--diff-filter=AM",
+    ...range,
+  ]);
+  if (result.code !== 0) return [];
+  // `--format=` still separates commits with a newline, so both separators are
+  // in play even under `-z`.
+  return [...new Set(result.stdout.split(/[\0\n]/).filter(Boolean))];
+}
+
+/**
+ * What the landing says about itself, which is all that separates the two
+ * ships that reach it.
+ *
+ * Each one takes the hash of HEAD, because the ship that just wrote a commit
+ * and the ship that found one already written both name it the same way.
+ */
+interface LandingCopy {
+  /** Headline for a push that failed, above the git output. */
+  readonly failureHeadline: (hash: string) => string;
+  /** First line of the report for a push that worked. */
+  readonly successHeadline: (hash: string) => string;
+  /** How a conflict handoff names the work that rides the rebase. */
+  readonly rides: (hash: string) => string;
+  /** The report's second block: the commit subject, or the commits that land. */
+  readonly body: string;
+  /** What is still safe on disk once a push has failed. */
+  readonly safety: string;
+}
+
+/**
+ * Everything after the payload exists: push it, survive losing a race, and say
+ * where it went.
+ *
+ * Both ships end here. One has just written a commit and the other found the
+ * commits already written, and past this line neither can lose work: a failed
+ * push has to say so, because not knowing whether the work was committed is
+ * what makes someone re-run and double-commit, or reset and lose it.
+ */
+async function landPayload(
+  git: Git,
+  ctx: ExtensionCommandContext,
+  destination: Destination,
+  branch: string | undefined,
+  copy: LandingCopy,
+  checkSummary: string,
+  verbose: boolean,
+): Promise<void> {
+  const readHead = async () =>
+    (
+      await requireSuccess(
+        git,
+        ["rev-parse", "--short", "HEAD"],
+        "Reading commit hash",
+      )
+    ).stdout.trim();
+  const commitHash = await readHead();
+
+  const notify = (text: string) => ctx.ui.notify(text, "info");
+  const target = destinationTarget(destination);
+
+  // `raw` separates the two kinds of detail this takes: verbatim git output,
+  // which is indented as a block, and an error message that is already a
+  // formatted notice, which would lose its own structure if it were.
+  const failed = (detail: string, raw = true) =>
+    new Error(
+      joinBlocks(
+        formatNotice(
+          copy.failureHeadline(commitHash),
+          raw ? { output: detail } : undefined,
+        ),
+        raw ? "" : detail,
+        copy.body.split("\n")[0] ?? "",
+        `${copy.safety} Fix the cause and run /ship again.`,
+      ),
+    );
+
+  const plan = pushPlan(destination);
+  let push: GitCommandResult;
+  try {
+    push = await pushWithRetry(git, plan, notify, PUSH_TIMEOUT_MS);
+  } catch (error) {
+    // A conflict here is the same handoff as before the commit, with one
+    // difference the agent has to be told about: the work already exists and
+    // rides the rebase, so rerunning /ship afterwards would find nothing to
+    // commit. The push is the only step left.
+    if (error instanceof RebaseConflictError) {
+      error.afterResolution =
+        `${copy.rides(commitHash)} ` +
+        `When the rebase has fully completed, push it with \`${["git", "push", ...plan.args].join(" ")}\`. ` +
+        `Do not create another commit.`;
+      throw error;
+    }
+    throw failed(error instanceof Error ? error.message : String(error), false);
+  }
+  if (push.code !== 0 || push.killed) throw failed(displayOutput(push));
+
+  // Re-syncing may have rebased onto a moved ref, which gives the commit a new
+  // hash; report the one that is actually on the remote.
+  const pushedHash = await readHead();
+
+  // Landing HEAD:main from a worktree moves origin/main and nothing local, so
+  // the trunk checkout is left behind by a commit the user just made.
+  //
+  // Its notices are collected rather than printed, because the message that was
+  // just committed is the one thing the user reads afterwards, and a trailing
+  // "pull it when convenient" about some other checkout buries it.
+  const housekeeping: string[] = [];
+  if (destination.kind === "trunk" && branch !== destination.ref) {
+    await syncLocalTrunk(git, destination.ref, (text) =>
+      housekeeping.push(text),
+    );
+  }
+
+  // The local trunk catching up to the commit that was just reported is not
+  // news; only the shapes that need the user to do something are.
+  const notable = housekeeping.filter(
+    (line) => !line.includes(pushedHash.slice(0, 7)),
+  );
+
+  // Two lines, in the order they get read: where it went, then what went. The
+  // check list is bookkeeping nobody reads on a run that worked, so it waits
+  // for `/ship verbose`. Housekeeping notices ride along, because those are the
+  // ones that ask the user to do something.
+  const report = joinBlocks(
+    copy.successHeadline(pushedHash),
+    copy.body.trim(),
+    verbose ? `Checks: ${checkSummary}` : "",
+    notable.length > 0 ? bulletList(notable, notable.length) : "",
+  );
+
+  ctx.ui.notify(report, "info");
+}
+
+/**
+ * The ship for a working tree with nothing in it.
+ *
+ * An agent that commits its own work as it goes leaves exactly this: a clean
+ * tree, and the ship sitting in history. That used to read as "Nothing to
+ * ship", which was true of the index and false of the repository. There is no
+ * message to write and no commit to make, so this is every other ship with the
+ * middle taken out: check what was committed, push it, report it.
+ *
+ * The checks still run, read-only. The card that offered this ship ran them
+ * too, and a push that skipped them would put unchecked code on the trunk by
+ * the one route that never passes through a commit.
+ */
+async function shipCommittedWork(
+  pi: ExtensionAPI,
+  ctx: ExtensionCommandContext,
+  git: Git,
+  destination: Destination,
+  branch: string | undefined,
+  ledger: CheckLedger,
+  recheck: boolean,
+  verbose: boolean,
+  progress: (text: string) => void,
+): Promise<void> {
+  const work = await listUnpushedCommits(git, destination);
+  if (work.lines.length === 0) {
+    ctx.ui.notify("Nothing to ship.", "info");
+    return;
+  }
+
+  const count = work.lines.length;
+  const commits = `${count} commit${count === 1 ? "" : "s"}`;
+  const target = destinationTarget(destination);
+  progress(
+    `Nothing to commit, so pushing ${commits} already on ${branch ?? "HEAD"}.`,
+  );
+
+  const committedPaths = await listCommittedPaths(git, work.range);
+  refuseSensitivePaths(committedPaths, "push");
+
+  const topLevel = await requireSuccess(
+    git,
+    ["rev-parse", "--show-toplevel"],
+    "Resolving repository root",
+  );
+  const repoRoot = topLevel.stdout.trim();
+  // A file added and later deleted by these commits has nothing left to check.
+  const present = committedPaths.filter((path) =>
+    existsSync(join(repoRoot, path)),
+  );
+  const checkSummary = await runStagedChecks(
+    pi,
+    ctx,
+    git,
+    repoRoot,
+    ledger,
+    recheck,
+    progress,
+    present,
+  );
+
+  const body = work.lines.join("\n");
+  await landPayload(
+    git,
+    ctx,
+    destination,
+    branch,
+    {
+      failureHeadline: () =>
+        `${commits} are waiting locally and the push to ${target} failed`,
+      successHeadline: () => `Shipped ${commits} to ${target}.`,
+      rides: () =>
+        `The ${commits} being shipped already exist and ride the rebase.`,
+      body,
+      safety: `The ${count === 1 ? "commit is" : "commits are"} safe locally.`,
+    },
+    checkSummary,
+    verbose,
+  );
+}
+
 export async function runShip(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
@@ -1008,27 +1295,56 @@ export async function runShip(
   const destination = await resolveDestination(git, override);
   progress(describeDestination(destination));
 
+  const listWorkingChanges = async () =>
+    parseNullSeparated(
+      (
+        await requireSuccess(
+          git,
+          [
+            "ls-files",
+            "--modified",
+            "--deleted",
+            "--others",
+            "--exclude-standard",
+            "-z",
+          ],
+          "Inspecting current changes",
+        )
+      ).stdout,
+    );
+
+  // Asked before anything rebases, because the answer decides which ship this
+  // is: the working tree, or commits an agent already wrote. A rebase cannot
+  // change it either way, since autostash puts back exactly what it took.
+  let stagedPaths = await listStagedPaths(git);
+  const committedOnly =
+    stagedPaths.length === 0 && (await listWorkingChanges()).length === 0;
+
   if (destination.kind === "trunk") {
-    await assertLandable(git, ctx, destination.ref);
+    await assertLandable(git, ctx, destination.ref, committedOnly);
   } else {
     await assertBranchPushable(git);
   }
 
-  let stagedPaths = await listStagedPaths(git);
-  if (stagedPaths.length === 0) {
-    const candidates = await requireSuccess(
+  if (committedOnly) {
+    await shipCommittedWork(
+      pi,
+      ctx,
       git,
-      [
-        "ls-files",
-        "--modified",
-        "--deleted",
-        "--others",
-        "--exclude-standard",
-        "-z",
-      ],
-      "Inspecting current changes",
+      destination,
+      branch,
+      ledger,
+      recheck ?? false,
+      verbose ?? false,
+      progress,
     );
-    const candidatePaths = parseNullSeparated(candidates.stdout);
+    return;
+  }
+
+  if (stagedPaths.length === 0) {
+    // Re-read after the rebase, because the autostash pop is what puts these
+    // back and the list is what gets staged.
+    const candidatePaths = await listWorkingChanges();
     if (candidatePaths.length === 0) {
       ctx.ui.notify("Nothing to ship.", "info");
       return;
@@ -1151,101 +1467,28 @@ export async function runShip(
     await rm(tempDirectory, { recursive: true, force: true });
   }
 
-  const readHead = async () =>
-    (
-      await requireSuccess(
-        git,
-        ["rev-parse", "--short", "HEAD"],
-        "Reading commit hash",
-      )
-    ).stdout.trim();
-  const commitHash = await readHead();
-
-  const notify = (text: string) => ctx.ui.notify(text, "info");
-  const target =
-    destination.kind === "trunk"
-      ? `origin/${destination.ref}`
-      : destination.branch;
   // The fast-forward was settled before the checks, the model call, and the
-  // commit, none of which the remote waits through. pushWithRetry settles it
+  // commit, none of which the remote waits through. landPayload settles it
   // again, and keeps settling it while sibling worktrees keep landing.
-  // Past this line a commit exists, so every failure has to say so. Losing the
-  // push is recoverable and obvious; not knowing whether the work was committed
-  // is what makes someone re-run and double-commit, or reset and lose it.
-  // `raw` separates the two kinds of detail this takes: verbatim git output,
-  // which is indented as a block, and an error message that is already a
-  // formatted notice, which would lose its own structure if it were.
-  const committed = (detail: string, raw = true) =>
-    new Error(
-      joinBlocks(
-        formatNotice(
-          `Committed ${commitHash} but the push to ${target} failed`,
-          raw ? { output: detail } : undefined,
-        ),
-        raw ? "" : detail,
-        message.split("\n")[0] ?? "",
-        "The commit is safe locally. Fix the cause and run /ship again.",
-      ),
-    );
-
-  const plan = pushPlan(destination);
-  let push: GitCommandResult;
-  try {
-    push = await pushWithRetry(git, plan, notify, PUSH_TIMEOUT_MS);
-  } catch (error) {
-    // A conflict here is the same handoff as before the commit, with one
-    // difference the agent has to be told about: the commit already exists and
-    // rides the rebase, so rerunning /ship afterwards would find nothing staged
-    // and refuse. The push is the only step left.
-    if (error instanceof RebaseConflictError) {
-      error.afterResolution =
-        `Commit ${commitHash} (${message.split("\n")[0]}) was already created and rides the rebase. ` +
-        `When the rebase has fully completed, push it with \`${["git", "push", ...plan.args].join(" ")}\`. ` +
-        `Do not create another commit.`;
-      throw error;
-    }
-    throw committed(
-      error instanceof Error ? error.message : String(error),
-      false,
-    );
-  }
-  if (push.code !== 0 || push.killed) throw committed(displayOutput(push));
-
-  // Re-syncing may have rebased onto a moved ref, which gives the commit a new
-  // hash; report the one that is actually on the remote.
-  const pushedHash = await readHead();
-
-  // Landing HEAD:main from a worktree moves origin/main and nothing local, so
-  // the trunk checkout is left behind by a commit the user just made.
-  //
-  // Its notices are collected rather than printed, because the message that was
-  // just committed is the one thing the user reads afterwards, and a trailing
-  // "pull it when convenient" about some other checkout buries it.
-  const housekeeping: string[] = [];
-  if (destination.kind === "trunk" && branch !== destination.ref) {
-    await syncLocalTrunk(git, destination.ref, (text) =>
-      housekeeping.push(text),
-    );
-  }
-
-  // The local trunk catching up to the commit that was just reported is not
-  // news; only the shapes that need the user to do something are.
-  const notable = housekeeping.filter(
-    (line) => !line.includes(pushedHash.slice(0, 7)),
+  const target = destinationTarget(destination);
+  const subject = message.split("\n")[0] ?? "";
+  await landPayload(
+    git,
+    ctx,
+    destination,
+    branch,
+    {
+      failureHeadline: (hash) =>
+        `Committed ${hash} but the push to ${target} failed`,
+      successHeadline: (hash) => `Shipped ${hash} to ${target}.`,
+      rides: (hash) =>
+        `Commit ${hash} (${subject}) was already created and rides the rebase.`,
+      body: message,
+      safety: "The commit is safe locally.",
+    },
+    checkSummary,
+    verbose ?? false,
   );
-
-  // Two lines, in the order they get read: where it went, then what went. The
-  // check list is bookkeeping nobody reads on a run that worked, so it waits
-  // for `/ship verbose`. Housekeeping notices ride along, because those are the
-  // ones that ask the user to do something.
-  const report = joinBlocks(
-    `Shipped ${pushedHash} to ${target}.`,
-    message.trim(),
-    verbose ? `Checks: ${checkSummary}` : "",
-    notable.length > 0 ? bulletList(notable, notable.length) : "",
-  );
-
-  ctx.ui.notify(report, "info");
 }
 
 /**

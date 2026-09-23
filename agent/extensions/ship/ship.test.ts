@@ -15,6 +15,7 @@ import {
   outputBlock,
 } from "./ship-notice";
 import { parseShipArguments } from "./ship-arguments";
+import { listCommittedPaths, listUnpushedCommits } from "./index";
 import { alert, DEFAULT_ALERT } from "./ship-alert";
 import { resolveGitHubRepository } from "./ship-repository";
 import {
@@ -522,6 +523,95 @@ describe("destination inference", () => {
       kind: "branch",
       branch: "dubai",
     });
+  });
+});
+
+describe("commits with nothing left in the tree", () => {
+  const trunk = { kind: "trunk", ref: "main", reason: "" } as const;
+
+  it("reads the commits the trunk has not got, newest first", async () => {
+    const { git, calls } = fakeGit({
+      "rev-parse": revParse({ "refs/remotes/origin/main": "deadbee" }),
+      log: [
+        result(
+          "9fed34a fix(toast): clamp the close delay\n431b65a feat(auth): drop the bundle\n",
+        ),
+      ],
+    });
+
+    expect(await listUnpushedCommits(git, trunk)).toEqual({
+      lines: [
+        "9fed34a fix(toast): clamp the close delay",
+        "431b65a feat(auth): drop the bundle",
+      ],
+      range: ["origin/main..HEAD"],
+    });
+    expect(calls.at(-1)).toEqual(["log", "--oneline", "origin/main..HEAD"]);
+  });
+
+  it("asks what no origin ref holds when the branch was never pushed", async () => {
+    const { git, calls } = fakeGit({
+      "rev-parse": revParse({}),
+      log: [result("9fed34a chore: scratch\n")],
+    });
+
+    const work = await listUnpushedCommits(git, {
+      kind: "branch",
+      branch: "dubai",
+      hasUpstream: false,
+      reason: "",
+    });
+
+    expect(work.range).toEqual(["HEAD", "--not", "--remotes=origin"]);
+    expect(calls.at(-1)).toEqual([
+      "log",
+      "--oneline",
+      "HEAD",
+      "--not",
+      "--remotes=origin",
+    ]);
+  });
+
+  it("reports nothing rather than a phantom commit when the log fails", async () => {
+    const { git } = fakeGit({
+      "rev-parse": revParse({ "refs/remotes/origin/main": "deadbee" }),
+      log: [result("fatal: bad revision\n", 128)],
+    });
+
+    expect((await listUnpushedCommits(git, trunk)).lines).toEqual([]);
+  });
+
+  it("collects every path the commits touched, once each", async () => {
+    // `--format=` leaves a newline between commits and `-z` a NUL between
+    // paths, so both separators arrive in one stream.
+    const { git } = fakeGit({
+      log: [result("\nsrc/a.ts\0src/b.ts\0\nsrc/a.ts\0")],
+    });
+
+    expect(await listCommittedPaths(git, ["origin/main..HEAD"])).toEqual([
+      "src/a.ts",
+      "src/b.ts",
+    ]);
+  });
+
+  it("keeps a secret committed and then deleted in the same range", async () => {
+    // The endpoint diff hides this file; the per-commit read is what catches
+    // it, and it is still on its way to the remote.
+    const { git, calls } = fakeGit({
+      log: [result(".env.production\0src/a.ts\0")],
+    });
+
+    expect(await listCommittedPaths(git, ["origin/main..HEAD"])).toContain(
+      ".env.production",
+    );
+    expect(calls.at(-1)).toEqual([
+      "log",
+      "--format=",
+      "--name-only",
+      "-z",
+      "--diff-filter=AM",
+      "origin/main..HEAD",
+    ]);
   });
 });
 

@@ -93,5 +93,10 @@ dangling symlinks on every other machine, so `setup.sh` recreates them instead.
 Without the argument, `/ship` closes a referenced issue with `(closes #42)`. `refs` is the escape
 hatch for work that moves a ticket forward without finishing it.
 
+A clean tree is not always an empty ship. When an agent has already committed its own work, `/ship`
+pushes those commits to the destination instead of saying there is nothing to do: no commit message
+is written, the committed files are checked read-only, and nothing is rewritten. Since there is no
+new commit subject, `refs` and `closes` have nowhere to go on that run, so close the ticket yourself.
+
 `agent/extensions/ship/node_modules/` is two symlinks into the global pi package, not a real install.
 `setup.sh` creates them. Without them the extension fails to load and `/ship` disappears.
