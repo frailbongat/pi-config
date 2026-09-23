@@ -48,6 +48,7 @@ import {
   currentBranch,
   describeDestination,
   resolveDestination,
+  resolveTrunk,
   type Destination,
   type ShipOverride,
 } from "./ship-destination";
@@ -1195,6 +1196,48 @@ async function landPayload(
  * too, and a push that skipped them would put unchecked code on the trunk by
  * the one route that never passes through a commit.
  */
+/**
+ * Why a clean tree had nothing to send, which the tree itself never says.
+ *
+ * The ordinary answer is that the remote already has everything. The one worth
+ * spelling out is a published branch still holding work the trunk has not got:
+ * `/ship` sends such a branch to its own remote by design, so the commits read
+ * as shipped while the trunk has never seen them, and `/ship main` is what
+ * lands them.
+ */
+export async function explainNothingToShip(
+  git: Git,
+  destination: Destination,
+): Promise<string> {
+  const remote =
+    destination.kind === "trunk"
+      ? `origin/${destination.ref}`
+      : `origin/${destination.branch}`;
+  const clean = `Nothing to ship: the working tree is clean and ${remote} already has every commit here`;
+  if (destination.kind === "trunk") return formatNotice(clean);
+
+  let trunk: string;
+  try {
+    trunk = await resolveTrunk(git);
+  } catch {
+    // No trunk to compare against is its own answer, and the ship would have
+    // failed on the destination long before reaching this.
+    return formatNotice(clean);
+  }
+
+  const unlanded = await git(["log", "--oneline", `origin/${trunk}..HEAD`]);
+  const items = unlanded.code === 0 ? unlanded.stdout.trim() : "";
+  if (!items) return formatNotice(clean);
+
+  const count = items.split("\n").length;
+  return formatNotice(clean, {
+    items,
+    footer:
+      `${count} commit${count === 1 ? "" : "s"} here ${count === 1 ? "is" : "are"} on ${remote} but not on ${trunk}. ` +
+      `Run \`/ship main\` to land ${count === 1 ? "it" : "them"} on the trunk.`,
+  });
+}
+
 async function shipCommittedWork(
   pi: ExtensionAPI,
   ctx: ExtensionCommandContext,
@@ -1208,7 +1251,7 @@ async function shipCommittedWork(
 ): Promise<void> {
   const work = await listUnpushedCommits(git, destination);
   if (work.lines.length === 0) {
-    ctx.ui.notify("Nothing to ship.", "info");
+    ctx.ui.notify(await explainNothingToShip(git, destination), "info");
     return;
   }
 

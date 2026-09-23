@@ -15,7 +15,11 @@ import {
   outputBlock,
 } from "./ship-notice";
 import { parseShipArguments } from "./ship-arguments";
-import { listCommittedPaths, listUnpushedCommits } from "./index";
+import {
+  explainNothingToShip,
+  listCommittedPaths,
+  listUnpushedCommits,
+} from "./index";
 import { alert, DEFAULT_ALERT } from "./ship-alert";
 import { resolveGitHubRepository } from "./ship-repository";
 import {
@@ -579,6 +583,54 @@ describe("commits with nothing left in the tree", () => {
     });
 
     expect((await listUnpushedCommits(git, trunk)).lines).toEqual([]);
+  });
+
+  it("names the remote that already has everything, on the trunk", async () => {
+    const { git } = fakeGit({});
+
+    expect(await explainNothingToShip(git, trunk)).toBe(
+      "Nothing to ship: the working tree is clean and origin/main already has every commit here.",
+    );
+  });
+
+  it("points a published branch at /ship main when the trunk is missing its work", async () => {
+    // The branch is fully pushed, so /ship has nothing to send to it, while
+    // main has never seen the two commits on it.
+    const { git } = fakeGit({
+      "symbolic-ref": [result("origin/main\n")],
+      log: [result("9fed34a fix(toast): clamp\n431b65a feat(auth): drop\n")],
+    });
+
+    const notice = await explainNothingToShip(git, {
+      kind: "branch",
+      branch: "dubai",
+      hasUpstream: true,
+      reason: "",
+    });
+
+    expect(notice).toContain("origin/dubai already has every commit here");
+    expect(notice).toContain("- 9fed34a fix(toast): clamp");
+    expect(notice).toContain(
+      "2 commits here are on origin/dubai but not on main. Run `/ship main` to land them on the trunk.",
+    );
+  });
+
+  it("says only the plain thing when the trunk has the branch's work already", async () => {
+    const { git } = fakeGit({
+      "symbolic-ref": [result("origin/main\n")],
+      log: [result("")],
+    });
+
+    expect(
+      await explainNothingToShip(git, {
+        kind: "branch",
+        branch: "dubai",
+        hasUpstream: true,
+        reason: "",
+      }),
+    ).toBe(
+      "Nothing to ship: the working tree is clean and origin/dubai already has every commit here.",
+    );
   });
 
   it("collects every path the commits touched, once each", async () => {
