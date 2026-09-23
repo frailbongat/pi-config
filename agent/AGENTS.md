@@ -40,6 +40,16 @@ Delegate to Paseo subagents by default. Before starting a task yourself, ask whi
 
 Do the work yourself only when delegating costs more than it saves: a one-line edit, a single file read, a question you can answer from this session, or work that needs this session's live state.
 
+## Library and API documentation
+
+Any time a task touches a library, framework, SDK, CLI tool, or cloud service, look the docs up with Context7 first. That covers API syntax, code generation against a library, setup steps, configuration, and version migration. Do it without being asked, and do it even for things you think you know, because your training data goes stale. Prefer it over web search for library docs.
+
+Use the `find-docs` skill at `/Users/frailbongat/.pi/agent/skills/find-docs/SKILL.md`. Short version: `npx ctx7@latest library "<Name>" "<what to look up>"` to get the `/org/project` ID, then `npx ctx7@latest docs <id> "<what to look up>"`. Cap it at 3 commands per question.
+
+Skip it for refactoring, scripts written from scratch, business-logic debugging, code review, and general programming concepts.
+
+If a command fails on quota, say so out loud and never fall back to training data silently.
+
 ## Writing quality
 
 The `unslop` skill at `/Users/frailbongat/.agents/skills/unslop/SKILL.md` always applies. It sets `disable-model-invocation`, so it will not show up in your skill list. Read that file by path before any writing, docs, commit message, or PR task, then apply its full rule set.
