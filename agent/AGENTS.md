@@ -40,6 +40,10 @@ Delegate to Paseo subagents by default. Before starting a task yourself, ask whi
 
 Do the work yourself only when delegating costs more than it saves: a one-line edit, a single file read, a question you can answer from this session, or work that needs this session's live state.
 
+## Hidden skills
+
+The skills listed in your prompt are not all of them. About twenty more are installed and hidden to save context, each one at `~/.agents/skills/<name>/SKILL.md`. When a visible skill, a project doc, or I name a skill you cannot see, read that path before saying it does not exist. `~/skills/hidden-skills.txt` is the full list.
+
 ## Library and API documentation
 
 Any time a task touches a library, framework, SDK, CLI tool, or cloud service, look the docs up with Context7 first. That covers API syntax, code generation against a library, setup steps, configuration, and version migration. Do it without being asked, and do it even for things you think you know, because your training data goes stale. Prefer it over web search for library docs.
