@@ -11,7 +11,10 @@
     },
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
-    "npm:pi-lens"
+    {
+      "source": "npm:pi-lens",
+      "skills": []
+    }
   ],
   "lastChangelogVersion": "0.87.1",
   "theme": "dark"
