@@ -46,13 +46,7 @@ The skills listed in your prompt are not all of them. About twenty more are inst
 
 ## Library and API documentation
 
-Any time a task touches a library, framework, SDK, CLI tool, or cloud service, look the docs up with Context7 first. That covers API syntax, code generation against a library, setup steps, configuration, and version migration. Do it without being asked, and do it even for things you think you know, because your training data goes stale. Prefer it over web search for library docs.
-
-Use the `find-docs` skill at `/Users/frailbongat/.pi/agent/skills/find-docs/SKILL.md`. Short version: `npx ctx7@latest library "<Name>" "<what to look up>"` to get the `/org/project` ID, then `npx ctx7@latest docs <id> "<what to look up>"`. Cap it at 3 commands per question.
-
-Skip it for refactoring, scripts written from scratch, business-logic debugging, code review, and general programming concepts.
-
-If a command fails on quota, say so out loud and never fall back to training data silently.
+Before you write or configure code against a library, framework, SDK, CLI tool, or cloud service, look up its current docs with Context7, even for APIs you think you know. Read `/Users/frailbongat/.pi/agent/skills/find-docs/SKILL.md` for the commands, and if one fails on quota, say so instead of falling back to training data.
 
 ## Writing quality
 
