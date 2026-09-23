@@ -1,6 +1,6 @@
 {
   "defaultProvider": "cliproxyapi",
-  "defaultModel": "claude-fable-5-1",
+  "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "high",
   "packages": [
     {
@@ -13,6 +13,6 @@
     "npm:pi-web-access",
     "npm:pi-lens"
   ],
-  "lastChangelogVersion": "0.85.1",
+  "lastChangelogVersion": "0.87.1",
   "theme": "dark"
 }
