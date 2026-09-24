@@ -3,18 +3,13 @@
   "defaultModel": "claude-opus-5-5",
   "defaultThinkingLevel": "high",
   "packages": [
-    {
-      "source": "npm:@router-for-me/pi-cliproxyapi-provider",
-      "extensions": [
-        "!tps.ts"
-      ]
-    },
     "npm:pi-mcp-adapter",
     "npm:pi-web-access",
     {
       "source": "npm:pi-lens",
       "skills": []
-    }
+    },
+    "npm:@router-for-me/pi-cliproxyapi-provider"
   ],
   "lastChangelogVersion": "0.87.1",
   "theme": "dark"
